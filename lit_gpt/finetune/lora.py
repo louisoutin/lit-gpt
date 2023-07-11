@@ -21,7 +21,7 @@ from lit_gpt.utils import (
     check_valid_checkpoint_dir,
     step_csv_logger,
     chunked_cross_entropy,
-    get_latest_version_path,
+    get_new_version_path,
 )
 from lit_gpt.speed_monitor import SpeedMonitor, measure_flops, estimate_flops
 from scripts.prepare_alpaca import generate_prompt
@@ -126,10 +126,10 @@ def main(fabric: L.Fabric, data_dir: Path, checkpoint_dir: Path, out_dir: Path):
     )
     model, optimizer = fabric.setup(model, optimizer)
 
-    writer = SummaryWriter(str(get_latest_version_path(out_dir) / "tensorboard"))
-    with open(
-        str(get_latest_version_path(out_dir) / "hyperparameters.json"), "w"
-    ) as json_file:
+    version = get_new_version_path(out_dir)
+    version_dir = out_dir / f"version_{version}"
+    writer = SummaryWriter(str(version_dir / "tensorboard"))
+    with open(str(version_dir / "hyperparameters.json"), "w") as json_file:
         hparams["model_name"] = checkpoint_dir.name
         hparams["data_dir"] = str(data_dir)
         json.dump(hparams, json_file, indent=4)
