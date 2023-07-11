@@ -30,7 +30,7 @@ eval_interval = 100
 save_interval = 100
 eval_iters = 100
 log_interval = 1
-devices = torch.cuda.device_count()
+devices = torch.cuda.device_count() or 1
 # change this value to force a maximum sequence length
 override_max_seq_length = None
 
