@@ -23,6 +23,7 @@ jsonargparse = {extras = ["signatures"], version = "^4.22.1"}
 tokenizers = "^0.13.3"
 huggingface-hub = "^0.16.4"
 lightning = {git = "https://github.com/Lightning-AI/lightning.git", branch= "master"}
+tensorboard = "^2.13.0"
 
 [tool.poetry.group.dev.dependencies]
 notebook = "^6.5.4"
