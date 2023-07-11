@@ -73,7 +73,6 @@ def quantization(mode: Optional[str] = None):
         quantized_linear_cls = functools.partial(
             ColBlockQuantizedLinear, bits=4, tile_cols=-1
         )
-        quantized_linear_cls = partial(ColBlockQuantizedLinear, bits=4, tile_cols=-1)
     else:
         raise ValueError(f"Unknown quantization mode: {mode}")
 
@@ -228,11 +227,17 @@ class LazyLoadingUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
         res = super().find_class(module, name)
         if module == "torch._utils" and name == "_rebuild_tensor_v2":
-            return partial(NotYetLoadedTensor.rebuild_tensor_v2, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_tensor_v2, archiveinfo=self
+            )
         elif module == "torch._tensor" and name == "_rebuild_from_type_v2":
-            return partial(NotYetLoadedTensor.rebuild_from_type_v2, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_from_type_v2, archiveinfo=self
+            )
         elif module == "torch._utils" and name == "_rebuild_parameter":
-            return partial(NotYetLoadedTensor.rebuild_parameter, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_parameter, archiveinfo=self
+            )
         return res
 
     def persistent_load(self, pid):
