@@ -23,6 +23,16 @@ def find_multiple(n: int, k: int) -> int:
     return n + k - (n % k)
 
 
+def get_latest_version_path(folder: Path) -> Path:
+    version = 0
+    versions_folder: list[Path] = [
+        path for path in folder.iterdir() if path.name.startswith("version_")
+    ]
+    if len(versions_folder) > 0:
+        version = int(max(versions_folder).name[len("version_") :]) + 1
+    return folder / f"version_{version}"
+
+
 @contextmanager
 def quantization(mode: Optional[str] = None):
     if mode is None:
@@ -36,7 +46,9 @@ def quantization(mode: Optional[str] = None):
     elif mode == "gptq.int4":
         from quantize.bnb import ColBlockQuantizedLinear
 
-        quantized_linear_cls = functools.partial(ColBlockQuantizedLinear, bits=4, tile_cols=-1)
+        quantized_linear_cls = functools.partial(
+            ColBlockQuantizedLinear, bits=4, tile_cols=-1
+        )
     else:
         raise ValueError(f"Unknown quantization mode: {mode}")
 
@@ -64,14 +76,18 @@ class NotYetLoadedTensor:
 
             def _load_tensor():
                 t = old_lt()
-                return torch._tensor._rebuild_from_type_v2(lambda: t, new_type, (), state)
+                return torch._tensor._rebuild_from_type_v2(
+                    lambda: t, new_type, (), state
+                )
 
             ret._load_tensor = _load_tensor
             return ret
         return torch._tensor._rebuild_from_type_v2(func, new_type, args, state)
 
     @classmethod
-    def rebuild_parameter(cls, data, requires_grad, backward_hooks, *, archiveinfo=None):
+    def rebuild_parameter(
+        cls, data, requires_grad, backward_hooks, *, archiveinfo=None
+    ):
         if isinstance(data, NotYetLoadedTensor):
             old_lt = data._load_tensor
 
@@ -85,11 +101,33 @@ class NotYetLoadedTensor:
 
     @classmethod
     def rebuild_tensor_v2(
-        cls, storage, storage_offset, size, stride, requires_grad, backward_hooks, metadata=None, *, archiveinfo=None
+        cls,
+        storage,
+        storage_offset,
+        size,
+        stride,
+        requires_grad,
+        backward_hooks,
+        metadata=None,
+        *,
+        archiveinfo=None,
     ):
-        rebuild_args = (storage_offset, size, stride, requires_grad, backward_hooks, metadata)
+        rebuild_args = (
+            storage_offset,
+            size,
+            stride,
+            requires_grad,
+            backward_hooks,
+            metadata,
+        )
         metatensor = torch._utils._rebuild_tensor_v2(
-            storage, storage_offset, size, stride, requires_grad, backward_hooks, metadata
+            storage,
+            storage_offset,
+            size,
+            stride,
+            requires_grad,
+            backward_hooks,
+            metadata,
         )
         storageinfo = storage.archiveinfo
         return NotYetLoadedTensor(metatensor, archiveinfo, storageinfo, rebuild_args)
@@ -100,14 +138,18 @@ class NotYetLoadedTensor:
 
         uts = (
             self.archiveinfo.zipfile_context.zf.get_storage_from_record(
-                f"data/{fn}", size * torch._utils._element_size(dtype), torch.UntypedStorage
+                f"data/{fn}",
+                size * torch._utils._element_size(dtype),
+                torch.UntypedStorage,
             )
             ._typed_storage()
             ._untyped_storage
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            storage = torch.storage.TypedStorage(wrap_storage=uts, dtype=self.metatensor.dtype, _internal=True)
+            storage = torch.storage.TypedStorage(
+                wrap_storage=uts, dtype=self.metatensor.dtype, _internal=True
+            )
         tensor = torch._utils._rebuild_tensor_v2(storage, *self.rebuild_args)
         return tensor
 
@@ -115,7 +157,9 @@ class NotYetLoadedTensor:
     def __torch_function__(cls, func, types, args=(), kwargs=None):
         if kwargs is None:
             kwargs = {}
-        loaded_args = [(a._load_tensor() if isinstance(a, NotYetLoadedTensor) else a) for a in args]
+        loaded_args = [
+            (a._load_tensor() if isinstance(a, NotYetLoadedTensor) else a) for a in args
+        ]
         res = func(*loaded_args, **kwargs)
         # gc.collect would be costly here, maybe do it optionally
         return res
@@ -159,11 +203,17 @@ class LazyLoadingUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
         res = super().find_class(module, name)
         if module == "torch._utils" and name == "_rebuild_tensor_v2":
-            return functools.partial(NotYetLoadedTensor.rebuild_tensor_v2, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_tensor_v2, archiveinfo=self
+            )
         elif module == "torch._tensor" and name == "_rebuild_from_type_v2":
-            return functools.partial(NotYetLoadedTensor.rebuild_from_type_v2, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_from_type_v2, archiveinfo=self
+            )
         elif module == "torch._utils" and name == "_rebuild_parameter":
-            return functools.partial(NotYetLoadedTensor.rebuild_parameter, archiveinfo=self)
+            return functools.partial(
+                NotYetLoadedTensor.rebuild_parameter, archiveinfo=self
+            )
         return res
 
     def persistent_load(self, pid):
@@ -194,9 +244,10 @@ def check_valid_checkpoint_dir(checkpoint_dir: Path) -> None:
     files = {
         "lit_model.pth": (checkpoint_dir / "lit_model.pth").is_file(),
         "lit_config.json": (checkpoint_dir / "lit_config.json").is_file(),
-        "tokenizer.json OR tokenizer.model": (checkpoint_dir / "tokenizer.json").is_file() or (
-            checkpoint_dir / "tokenizer.model"
-        ).is_file(),
+        "tokenizer.json OR tokenizer.model": (
+            checkpoint_dir / "tokenizer.json"
+        ).is_file()
+        or (checkpoint_dir / "tokenizer.model").is_file(),
         "tokenizer_config.json": (checkpoint_dir / "tokenizer_config.json").is_file(),
     }
     if checkpoint_dir.is_dir():
@@ -210,7 +261,9 @@ def check_valid_checkpoint_dir(checkpoint_dir: Path) -> None:
     # list locally available checkpoints
     available = list(Path("checkpoints").glob("*/*"))
     if available:
-        options = f"\n --checkpoint_dir ".join([""] + [repr(str(p.resolve())) for p in available])
+        options = f"\n --checkpoint_dir ".join(
+            [""] + [repr(str(p.resolve())) for p in available]
+        )
         extra = f"\nYou have downloaded locally:{options}\n"
     else:
         extra = ""
@@ -246,7 +299,13 @@ class SavingProxyForStorage:
         storage_key = saver._write_storage_and_return_key(storage)
         location = torch.serialization.location_tag(storage)
 
-        self.storage_info = ("storage", storage_type, storage_key, location, storage_numel)
+        self.storage_info = (
+            "storage",
+            storage_type,
+            storage_key,
+            location,
+            storage_numel,
+        )
 
     def __reduce_ex__(self, protocol_version):
         assert False, "this should be handled with out of band"
@@ -255,14 +314,22 @@ class SavingProxyForStorage:
 class SavingProxyForTensor:
     def __init__(self, tensor, saver, protocol_version=5):
         self.protocol_version = protocol_version
-        self.reduce_ret_fn, (storage, *other_reduce_args) = tensor.__reduce_ex__(protocol_version)
-        assert isinstance(storage, torch.storage.TypedStorage), "Please check for updates"
-        storage_proxy = SavingProxyForStorage(storage, saver, protocol_version=protocol_version)
+        self.reduce_ret_fn, (storage, *other_reduce_args) = tensor.__reduce_ex__(
+            protocol_version
+        )
+        assert isinstance(
+            storage, torch.storage.TypedStorage
+        ), "Please check for updates"
+        storage_proxy = SavingProxyForStorage(
+            storage, saver, protocol_version=protocol_version
+        )
         self.reduce_args = (storage_proxy, *other_reduce_args)
 
     def __reduce_ex__(self, protocol_version):
         if protocol_version != self.protocol_version:
-            raise RuntimeError(f"Unexpected protocol version: expected {self.protocol_version}, got {protocol_version}")
+            raise RuntimeError(
+                f"Unexpected protocol version: expected {self.protocol_version}, got {protocol_version}"
+            )
         return self.reduce_ret_fn, self.reduce_args
 
 
@@ -395,7 +462,9 @@ def step_csv_logger(*args: Any, **kwargs: Any) -> CSVLogger:
 
 
 def chunked_cross_entropy(
-    logits: Union[torch.Tensor, List[torch.Tensor]], targets: torch.Tensor, chunk_size: int = 128
+    logits: Union[torch.Tensor, List[torch.Tensor]],
+    targets: torch.Tensor,
+    chunk_size: int = 128,
 ) -> torch.Tensor:
     # with large max_sequence_lengths, the beginning of `backward` allocates a large memory chunk which can dominate
     # the memory usage in fine-tuning settings with low number of parameters.
@@ -412,10 +481,17 @@ def chunked_cross_entropy(
             return torch.nn.functional.cross_entropy(logits, targets, ignore_index=-1)
 
         # chunk cross entropy
-        logit_chunks = [logit_chunk.reshape(-1, logit_chunk.size(-1)) for logit_chunk in logits]
-        target_chunks = [target_chunk.reshape(-1) for target_chunk in targets.split(logits[0].size(1), dim=1)]
+        logit_chunks = [
+            logit_chunk.reshape(-1, logit_chunk.size(-1)) for logit_chunk in logits
+        ]
+        target_chunks = [
+            target_chunk.reshape(-1)
+            for target_chunk in targets.split(logits[0].size(1), dim=1)
+        ]
         loss_chunks = [
-            torch.nn.functional.cross_entropy(logit_chunk, target_chunk, ignore_index=-1, reduction="none")
+            torch.nn.functional.cross_entropy(
+                logit_chunk, target_chunk, ignore_index=-1, reduction="none"
+            )
             for logit_chunk, target_chunk in zip(logit_chunks, target_chunks)
         ]
         return torch.cat(loss_chunks).mean()
@@ -430,7 +506,9 @@ def chunked_cross_entropy(
     logit_chunks = logits.split(chunk_size)
     target_chunks = targets.split(chunk_size)
     loss_chunks = [
-        torch.nn.functional.cross_entropy(logit_chunk, target_chunk, ignore_index=-1, reduction="none")
+        torch.nn.functional.cross_entropy(
+            logit_chunk, target_chunk, ignore_index=-1, reduction="none"
+        )
         for logit_chunk, target_chunk in zip(logit_chunks, target_chunks)
     ]
     return torch.cat(loss_chunks).mean()
