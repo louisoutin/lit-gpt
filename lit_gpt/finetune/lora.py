@@ -1,4 +1,5 @@
 import os
+import json
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from lit_gpt.utils import (
     check_valid_checkpoint_dir,
     step_csv_logger,
     chunked_cross_entropy,
+    get_latest_version_path,
 )
 from lit_gpt.speed_monitor import SpeedMonitor, measure_flops, estimate_flops
 from scripts.prepare_alpaca import generate_prompt
@@ -90,7 +92,6 @@ def main(fabric: L.Fabric, data_dir: Path, checkpoint_dir: Path, out_dir: Path):
 
     speed_monitor = SpeedMonitor(fabric, window_size=50, time_unit="seconds")
     # default `log_dir` is "runs" - we'll be more specific here
-    writer = SummaryWriter(str(Path(out_dir) / "tensorboard"))
 
     fabric.seed_everything(1337 + fabric.global_rank)
 
@@ -124,6 +125,15 @@ def main(fabric: L.Fabric, data_dir: Path, checkpoint_dir: Path, out_dir: Path):
         trainable_params, lr=learning_rate, weight_decay=weight_decay
     )
     model, optimizer = fabric.setup(model, optimizer)
+
+    writer = SummaryWriter(str(get_latest_version_path(out_dir) / "tensorboard"))
+    with open(
+        str(get_latest_version_path(out_dir) / "hyperparameters.json"), "w"
+    ) as json_file:
+        hparams["model_name"] = checkpoint_dir.name
+        hparams["data_dir"] = str(data_dir)
+        json.dump(hparams, json_file, indent=4)
+        json_file.close()
 
     train_time = time.time()
     train(
@@ -276,7 +286,9 @@ def validate(
     # produce first 10 examples:
 
     for sample in val_data[: min(len(val_data), 10)]:
-        fabric.print(sample)
+        fabric.print(f"Instruction: {sample['instruction']}")
+        fabric.print(f"Input: {sample['input']}")
+        fabric.print(f"Expected Output: {sample['output']}")
         prompt = generate_prompt(sample)
         encoded = tokenizer.encode(prompt, device=model.device)
         max_returned_tokens = len(encoded) + 100
@@ -288,15 +300,18 @@ def validate(
             temperature=0.8,
         )
         output = tokenizer.decode(output)
-        fabric.print(output)
+        fabric.print(f"LLM Answer: {output}")
+        fabric.print("##End LLM Answer##")
         text_to_print: str = f"""Instruction:
-{sample}
-
-Answer:
+{sample['instruction']}
+Input:
+{sample['input']}
+Expected Output:
+{sample['output']}
+LLM Answer:
 {output}"""
         writer.add_text("example prediction", text_to_print, iter_num)
-
-    model.reset_cache()
+        model.reset_cache()
     model.train()
     return val_loss.item()
 
