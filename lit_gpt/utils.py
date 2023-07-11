@@ -23,14 +23,14 @@ def find_multiple(n: int, k: int) -> int:
     return n + k - (n % k)
 
 
-def get_latest_version_path(folder: Path) -> Path:
+def get_new_version_path(folder: Path) -> int:
     version = 0
     versions_folder: list[Path] = [
         path for path in folder.iterdir() if path.name.startswith("version_")
     ]
     if len(versions_folder) > 0:
-        version = int(max(versions_folder).name[len("version_") :])
-    return folder / f"version_{version}"
+        version = int(max(versions_folder).name[len("version_") :]) + 1
+    return version
 
 
 @contextmanager
