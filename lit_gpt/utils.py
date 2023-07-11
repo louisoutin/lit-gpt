@@ -29,7 +29,7 @@ def get_latest_version_path(folder: Path) -> Path:
         path for path in folder.iterdir() if path.name.startswith("version_")
     ]
     if len(versions_folder) > 0:
-        version = int(max(versions_folder).name[len("version_") :]) + 1
+        version = int(max(versions_folder).name[len("version_") :])
     return folder / f"version_{version}"
 
 
