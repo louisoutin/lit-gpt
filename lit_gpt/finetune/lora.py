@@ -298,6 +298,7 @@ def validate(
             max_returned_tokens=max_returned_tokens,
             max_seq_length=max_returned_tokens,
             temperature=0.8,
+            eos_id=tokenizer.eos_id,
         )
         output = tokenizer.decode(output)
         fabric.print(f"LLM Answer: {output}")
