@@ -19,6 +19,8 @@
 
 # ⚡ Lit-GPT
 
+### Note: This is a fork of the original lit-gpt repo, organized as a python package for easy import (using pip install git+https://github.com/louisoutin/lit-gpt)
+
 Hackable [implementation](lit_gpt/model.py) of state-of-the-art open-source large language models released under the **Apache 2.0 license**.
 
 Supports popular public checkpoints such as:

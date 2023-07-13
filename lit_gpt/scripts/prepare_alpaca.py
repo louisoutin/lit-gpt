@@ -33,15 +33,19 @@ def prepare(
     data_file_name: str = DATA_FILE_NAME,
     data_file_url: str = DATA_FILE_URL,
     ignore_index: int = IGNORE_INDEX,
-) -> None:
+    max_seq_length: int | None = None,
+) -> int:
     """Prepare the Alpaca dataset for instruction tuning.
 
     The output is a training and test dataset saved as `train.pt` and `test.pt`,
     which stores the preprocessed and tokenized prompts and labels.
+
+    Returns: length of train set
     """
-    with open(checkpoint_dir / "lit_config.json", "r") as file:
-        config = json.load(file)
-        max_seq_length = config["block_size"]
+    if max_seq_length is None:
+        with open(checkpoint_dir / "lit_config.json", "r") as file:
+            config = json.load(file)
+            max_seq_length = config["block_size"]
 
     destination_path.mkdir(parents=True, exist_ok=True)
     data_file_path = destination_path / data_file_name
@@ -56,13 +60,15 @@ def prepare(
     # Partition the dataset into train and test
     train_split_size = len(data) - test_split_size
     train_set, test_set = random_split(
-        data, lengths=(train_split_size, test_split_size), generator=torch.Generator().manual_seed(seed)
+        data,
+        lengths=(train_split_size, test_split_size),
+        generator=torch.Generator().manual_seed(seed),
     )
     train_set, test_set = list(train_set), list(test_set)
 
     print(f"train has {len(train_set):,} samples")
     print(f"test has {len(test_set):,} samples")
-
+    print(f"Using max_seq_len={max_seq_length}")
     print("Processing train split ...")
     train_set = [
         prepare_sample(
@@ -88,6 +94,7 @@ def prepare(
         for sample in tqdm(test_set)
     ]
     torch.save(test_set, destination_path / "test.pt")
+    return len(train_set)
 
 
 def download_if_missing(file_path: Path, file_url: str):
@@ -124,7 +131,9 @@ def prepare_sample(
     full_prompt = generate_prompt(example)
     full_prompt_and_response = full_prompt + example["output"]
     encoded_full_prompt = tokenizer.encode(full_prompt, max_length=max_length)
-    encoded_full_prompt_and_response = tokenizer.encode(full_prompt_and_response, eos=True, max_length=max_length)
+    encoded_full_prompt_and_response = tokenizer.encode(
+        full_prompt_and_response, eos=True, max_length=max_length
+    )
 
     # The labels are the full prompt with response, but with the prompt masked out
     labels = encoded_full_prompt_and_response.clone()
